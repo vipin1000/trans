@@ -169,11 +169,9 @@
 
 
 
-from flask import Flask, request, render_template, send_file, redirect, url_for, flash
-import sounddevice as sd
-import soundfile as sf
-import tempfile
+from flask import Flask, render_template, request, redirect, url_for, send_file
 import os
+import tempfile
 from translation_functions import (
     transcribe_audio,
     translate_text,
@@ -181,52 +179,51 @@ from translation_functions import (
     get_speech_recognition_language_code
 )
 
-# Initialize the Flask application
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'  # Necessary for flashing messages
 
 LANGUAGE_OPTIONS = {
     'en': 'English',
     'hi': 'Hindi',
 }
 
-# Recording function
-def record_audio(duration=5, sample_rate=48000):
-    recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1)
-    sd.wait()
-    temp_wav = tempfile.NamedTemporaryFile(suffix='.wav', delete=False).name
-    sf.write(temp_wav, recording, sample_rate)
-    return temp_wav
-
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
+        source_lang = request.form.get('source_lang')
+        target_lang = request.form.get('target_lang')
+        audio_file = request.files['audio_file']
+
+        if not audio_file:
+            return "No audio file uploaded", 400
+
+        # Save uploaded file temporarily
+        temp_input = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+        audio_file.save(temp_input.name)
+
+        # Output file
+        temp_output = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False)
+
         try:
-            source_lang = request.form.get('source_lang')
-            target_lang = request.form.get('target_lang')
-
-            # Record Audio
-            temp_wav = record_audio()
-
             # Step 1: Transcribe
             language_code = get_speech_recognition_language_code(source_lang)
-            transcribed_text = transcribe_audio(temp_wav, language_code)
+            transcribed_text = transcribe_audio(temp_input.name, language_code)
 
             # Step 2: Translate
             translated_text = translate_text(transcribed_text, source_lang, target_lang)
 
-            # Step 3: Convert to speech
-            temp_output = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False).name
-            text_to_speech(translated_text, temp_output, language=target_lang)
+            # Step 3: Text to Speech
+            text_to_speech(translated_text, temp_output.name, language=target_lang)
 
-            # Save paths into session or temporary
-            return send_file(temp_output, as_attachment=True, download_name=f'translated_{target_lang}.mp3')
+            return send_file(temp_output.name, as_attachment=True, download_name=f"translated_{target_lang}.mp3")
 
-        except Exception as e:
-            flash(f"Error during processing: {str(e)}", 'danger')
-            return redirect(url_for('index'))
+        finally:
+            # Cleanup
+            try:
+                os.unlink(temp_input.name)
+            except:
+                pass
 
     return render_template('index.html', languages=LANGUAGE_OPTIONS)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(debug=True)
