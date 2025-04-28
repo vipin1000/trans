@@ -168,10 +168,8 @@
 # """)         
 
 
-
 import streamlit as st
 import tempfile
-import gtts
 import os
 from translation_functions import (
     transcribe_audio,
@@ -180,17 +178,16 @@ from translation_functions import (
     get_speech_recognition_language_code
 )
 
+import streamlit.components.v1 as components
+
+# Language Options
 LANGUAGE_OPTIONS = {
     'en': 'English',
     'hi': 'Hindi',
 }
 
 # Set page config
-st.set_page_config(
-    page_title="Audio Translator",
-    page_icon="🎙️",
-    layout="wide"
-)
+st.set_page_config(page_title="Audio Translator", page_icon="🎙️", layout="wide")
 
 # Title and description
 st.title("🎙️ Audio Translator")
@@ -218,34 +215,69 @@ with col2:
         help="Select the language you want to translate to"
     )
 
-# Audio file upload
-if 'audio_recorded' not in st.session_state:
-    st.session_state['audio_recorded'] = False
+# JavaScript for microphone access (custom component)
+def record_audio():
+    audio_data = components.html("""
+        <script>
+            let recordButton = document.createElement('button');
+            recordButton.innerHTML = 'Record';
+            document.body.appendChild(recordButton);
 
-def upload_audio():
-    audio_file = st.file_uploader("Upload your audio", type=["wav", "mp3", "ogg", "flac"])
-    if audio_file is not None:
-        st.audio(audio_file)
-        return audio_file
-    else:
-        st.warning("Please upload an audio file.")
-        return None
+            let audioChunks = [];
+            let mediaRecorder = null;
 
-# Audio file upload and processing
-audio_file = upload_audio()
+            recordButton.onclick = function () {
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                    recordButton.innerHTML = 'Start Recording';
+                } else {
+                    navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then(function(stream) {
+                            mediaRecorder = new MediaRecorder(stream);
+                            mediaRecorder.ondataavailable = function(event) {
+                                audioChunks.push(event.data);
+                            };
+                            mediaRecorder.onstop = function() {
+                                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                                const audioUrl = URL.createObjectURL(audioBlob);
+                                const audio = new Audio(audioUrl);
+                                audio.play();
 
-# Process the uploaded audio
-if audio_file:
+                                // Send audio data to Streamlit
+                                const reader = new FileReader();
+                                reader.onloadend = function() {
+                                    const base64Audio = reader.result.split(',')[1];
+                                    window.parent.postMessage({ type: "audio_data", data: base64Audio }, "*");
+                                };
+                                reader.readAsDataURL(audioBlob);
+                            };
+                            mediaRecorder.start();
+                            recordButton.innerHTML = 'Stop Recording';
+                        })
+                        .catch(function(err) {
+                            alert("Error accessing microphone: " + err);
+                        });
+                }
+            };
+        </script>
+    """, height=200)
+    return audio_data
+
+# Use the recording function to get audio data
+audio_data = record_audio()
+
+# Handle audio recording, translation, and text-to-speech
+if audio_data:
     try:
         # Show progress
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
+
         # Save uploaded file to temporary location
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-            temp_file.write(audio_file.read())
+            temp_file.write(audio_data)  # Convert audio data from base64
             temp_wav = temp_file.name
-        
+
         # Step 1: Transcribe
         status_text.text("Step 1/3: Transcribing audio...")
         try:
@@ -270,7 +302,6 @@ if audio_file:
         # Step 3: Convert to speech
         status_text.text("Step 3/3: Converting to speech...")
         try:
-            # Generate speech from translated text
             with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_output:
                 text_to_speech(translated_text, temp_output.name, language=target_lang)
                 progress_bar.progress(100)
@@ -304,20 +335,20 @@ if audio_file:
 # Add some helpful information
 st.markdown("""
 ### How to use:
-1. Click on Record button to start recording
+1. Click on the Record button to start recording from your microphone.
 2. Select the source language 
-3. Select the target language
-4. Click 'Translate' and wait for the processing to complete
-5. Listen to the translated audio or download it
+3. Select the target language.
+4. Click 'Translate' and wait for the processing to complete.
+5. Listen to the translated audio or download it.
 
 ### Supported Languages:
 - English (en)
 - Hindi (hi)
-- And Many More            
+- And many more!
 
 ### Troubleshooting:
-1. Make sure Microphone is Connected properly 
-2. Ensure you have a stable internet connection
-3. Ensure the project has Microphone access
-4. The audio should be in the language you selected as the source language
+1. Ensure your microphone is properly connected.
+2. Ensure you have a stable internet connection.
+3. Ensure the project has microphone access.
+4. The audio should be in the language you selected as the source language.
 """)
