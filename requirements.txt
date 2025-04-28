@@ -1,9 +1,6 @@
-streamlit
-pydub
-SpeechRecognition
-gTTS
-deep-translator
-sounddevice
-soundfile
-
-
+Flask==3.0.3
+sounddevice==0.4.6
+soundfile==0.12.1
+gTTS==2.5.1
+numpy==1.26.4
+pytz==2024.1
