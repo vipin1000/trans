@@ -1,0 +1,11 @@
+[server]
+headless = true
+
+[global]
+sendUsageStats = false
+
+[theme]
+primaryColor = "blue"
+backgroundColor = "black"
+secondaryBackgroundColor = "gray"
+textColor = "white"
