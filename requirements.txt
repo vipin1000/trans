@@ -1,9 +1,9 @@
-sounddevice
 streamlit
 pydub
-gtts
+SpeechRecognition
+gTTS
 deep-translator
+sounddevice
 soundfile
-speechrecognition
-pyttsx3
-pytzs
+
+
